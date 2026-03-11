@@ -4,10 +4,92 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  INCONCLUSIVE
+}
+
+model User {
+  id          String        @id @default(cuid())
+  email       String        @unique
+  name        String?
+  createdAt   DateTime      @default(now())
+  analysisRun AnalysisRun[]
+}
+
+model Client {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  region      String?
+  createdAt   DateTime      @default(now())
+  saleHistory SaleHistory[]
+  analysisRun AnalysisRun[]
+}
+
+model Product {
+  id          String        @id @default(cuid())
+  sku         String        @unique
+  name        String
+  aliases     String[]
+  createdAt   DateTime      @default(now())
+  saleHistory SaleHistory[]
+  analysisItem AnalysisItem[]
+}
+
+model SaleHistory {
+  id        String   @id @default(cuid())
+  clientId  String
+  productId String
+  quantity  Float
+  soldAt    DateTime
+  createdAt DateTime @default(now())
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, productId])
+}
+
+model AnalysisRun {
+  id          String        @id @default(cuid())
+  clientId    String
+  userId      String?
+  fileName    String
+  overallRisk RiskLevel
+  aiSummary   String
+  createdAt   DateTime      @default(now())
+
+  client Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items  AnalysisItem[]
+
+  @@index([clientId, createdAt])
+}
+
+model AnalysisItem {
+  id               String    @id @default(cuid())
+  analysisRunId    String
+  productId        String?
+  rawDescription   String
+  quantity         Float
+  confidence       Float
+  itemRisk         RiskLevel
+  findingsJson     Json
+  createdAt        DateTime  @default(now())
+
+  analysisRun AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([analysisRunId])
 }
