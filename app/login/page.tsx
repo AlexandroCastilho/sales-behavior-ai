@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
+import { registerFormSchema } from "@/lib/validation/auth";
+
 type Mode = "login" | "register" | "forgot";
 
 type AuthUser = {
@@ -11,6 +14,20 @@ type AuthUser = {
   email: string;
   name?: string | null;
 };
+
+function getRegisterValidationMessage(input: {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}): string | null {
+  const parsed = registerFormSchema.safeParse(input);
+  if (parsed.success) {
+    return null;
+  }
+
+  return parsed.error.issues[0]?.message ?? "Dados de cadastro invalidos.";
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,10 +85,14 @@ export default function LoginPage() {
   }
 
   async function handleRegister() {
-    if (password !== confirmPassword) {
-      setError("As senhas nao conferem.");
+    const validationError = getRegisterValidationMessage({ name, email, password, confirmPassword });
+    if (validationError) {
+      setError(validationError);
       return;
     }
+
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
 
     setIsLoading(true);
     setError(null);
@@ -81,7 +102,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name: normalizedName, email: normalizedEmail, password }),
       });
 
       const data = (await response.json()) as { message?: string; detail?: string };
@@ -155,8 +176,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-100 px-4 py-10 sm:px-6 lg:px-8">
-      <section className="mx-auto grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_24px_80px_rgba(20,20,20,0.08)] lg:grid-cols-[1.15fr_1fr]">
+    <main className="min-h-screen bg-zinc-100 px-4 py-10 sm:px-6 lg:px-8 dark:bg-zinc-950">
+      <section className="mx-auto grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_24px_80px_rgba(20,20,20,0.08)] dark:border-zinc-800 dark:bg-zinc-900 lg:grid-cols-[1.15fr_1fr]">
         <div className="relative flex flex-col justify-between bg-gradient-to-b from-zinc-900 to-zinc-800 p-8 text-zinc-100 sm:p-10">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_15%,rgba(255,255,255,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.08),transparent_35%)]" />
           <div className="relative">
@@ -174,8 +195,12 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="p-8 sm:p-10">
-          <div className="mb-6 inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+        <div className="p-8 sm:p-10 dark:text-zinc-100">
+          <div className="mb-4 flex justify-end">
+            <ThemeToggle />
+          </div>
+
+          <div className="mb-6 inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-800">
             <button
               type="button"
               onClick={() => {
@@ -184,7 +209,7 @@ export default function LoginPage() {
                 setMessage(null);
               }}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                mode === "login" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200"
+                mode === "login" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-200 dark:hover:bg-zinc-700"
               }`}
             >
               Login
@@ -197,7 +222,7 @@ export default function LoginPage() {
                 setMessage(null);
               }}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                mode === "register" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200"
+                mode === "register" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-200 dark:hover:bg-zinc-700"
               }`}
             >
               Cadastrar
@@ -210,7 +235,7 @@ export default function LoginPage() {
                 setMessage(null);
               }}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                mode === "forgot" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200"
+                mode === "forgot" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-200 dark:hover:bg-zinc-700"
               }`}
             >
               Esqueci senha
@@ -223,7 +248,7 @@ export default function LoginPage() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Nome"
-                className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900"
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
               />
             ) : null}
 
@@ -232,7 +257,7 @@ export default function LoginPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="Email"
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900"
+              className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
             />
 
             {(mode === "login" || mode === "register") ? (
@@ -241,7 +266,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Senha"
-                className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900"
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
               />
             ) : null}
 
@@ -251,7 +276,7 @@ export default function LoginPage() {
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="Confirmar senha"
-                className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900"
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
               />
             ) : null}
 
@@ -265,13 +290,13 @@ export default function LoginPage() {
                     value={resetCode}
                     onChange={(event) => setResetCode(event.target.value.replace(/\D/g, ""))}
                     placeholder="Codigo de 6 digitos"
-                    className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900"
+                    className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
                   />
                   <button
                     type="button"
                     onClick={handleForgotRequest}
                     disabled={isLoading}
-                    className="shrink-0 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60"
+                    className="shrink-0 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
                   >
                     Enviar codigo
                   </button>
@@ -281,7 +306,7 @@ export default function LoginPage() {
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   placeholder="Nova senha"
-                  className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900"
+                  className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
                 />
               </>
             ) : null}
@@ -295,7 +320,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleLogin}
                 disabled={isLoading}
-                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60"
+                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 {isLoading ? "Entrando..." : "Entrar"}
               </button>
@@ -306,7 +331,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleRegister}
                 disabled={isLoading}
-                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60"
+                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 {isLoading ? "Criando conta..." : "Criar conta"}
               </button>
@@ -317,17 +342,17 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleForgotReset}
                 disabled={isLoading}
-                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60"
+                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 {isLoading ? "Redefinindo..." : "Redefinir senha"}
               </button>
             ) : null}
 
-            <p className="pt-2 text-center text-xs text-zinc-500">
+            <p className="pt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
               Ao continuar, voce concorda com o uso interno da plataforma.
             </p>
-            <p className="text-center text-xs text-zinc-500">
-              Precisa de ajuda? <Link href="/" className="font-medium text-zinc-700 underline underline-offset-2">Acessar ferramenta</Link>
+            <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
+              Precisa de ajuda? <Link href="/" className="font-medium text-zinc-700 underline underline-offset-2 dark:text-zinc-300">Acessar ferramenta</Link>
             </p>
           </div>
         </div>

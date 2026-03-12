@@ -23,7 +23,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              try {
+                const stored = localStorage.getItem("theme");
+                const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                const theme = stored === "dark" || stored === "light" ? stored : (preferredDark ? "dark" : "light");
+                document.documentElement.classList.toggle("dark", theme === "dark");
+              } catch {}
+            })();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

@@ -3,18 +3,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
+import { registerBodySchema } from "@/lib/validation/auth";
 import { registerWithPassword } from "@/services/auth.service";
-
-const bodySchema = z.object({
-  name: z.string().min(2).max(120).optional(),
-  email: z.string().email(),
-  password: z.string().min(8).max(128),
-});
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, password } = bodySchema.parse(body);
+    const { name, email, password } = registerBodySchema.parse(body);
 
     const { sessionToken, user } = await registerWithPassword({ name, email, password });
 
@@ -30,7 +25,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Cadastro realizado com sucesso.", user }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: "Dados invalidos.", issues: error.flatten() }, { status: 400 });
+      const issues = error.issues.map((issue) => issue.message).join(" ");
+      return NextResponse.json(
+        { message: "Dados invalidos.", detail: issues || "Revise os campos obrigatorios.", issues: error.flatten() },
+        { status: 400 },
+      );
     }
 
     const detail = error instanceof Error ? error.message : "Erro desconhecido";
