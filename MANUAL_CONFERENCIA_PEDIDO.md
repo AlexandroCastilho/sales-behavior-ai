@@ -20,8 +20,12 @@ GEMINI_API_KEY="..."
 Para envio real de codigo por email (opcional em dev):
 
 ```bash
-RESEND_API_KEY="..."
-EMAIL_FROM="no-reply@suaempresa.com"
+SMTP_HOST="smtps.uhserver.com"
+SMTP_PORT="465"
+SMTP_SECURE="true"
+SMTP_USER="vendas1@amafil.com.br"
+SMTP_PASS="..."
+EMAIL_FROM="Amafil <vendas1@amafil.com.br>"
 ```
 
 ## 3. Iniciar o sistema web
@@ -45,7 +49,7 @@ Abra o navegador em http://localhost:3000.
 
 Observacao sobre envio de codigo:
 
-- Producao: codigo chega no email (com RESEND_API_KEY e EMAIL_FROM).
+- Producao: codigo chega no email (com SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS e EMAIL_FROM).
 - Desenvolvimento: codigo pode ser exibido como dica no frontend.
 
 ## 5. Conferencia de pedido (fluxo principal)

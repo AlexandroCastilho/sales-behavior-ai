@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createErrorResponse } from "@/lib/api-error";
+import { extractClientIp } from "@/lib/request-ip";
 import { resetPasswordWithCode } from "@/services/auth.service";
 
 const bodySchema = z.object({
@@ -14,8 +15,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { email, code, newPassword } = bodySchema.parse(body);
+    const ipAddress = extractClientIp(request.headers);
 
-    await resetPasswordWithCode({ email, code, newPassword });
+    await resetPasswordWithCode({ email, code, newPassword, ipAddress });
 
     return NextResponse.json({ message: "Senha redefinida com sucesso." }, { status: 200 });
   } catch (error) {
@@ -26,7 +28,10 @@ export async function POST(request: Request) {
     return createErrorResponse({
       error,
       message: "Falha ao redefinir senha.",
-      statusRules: [{ includes: "Codigo invalido", status: 401 }],
+      statusRules: [
+        { includes: "Codigo invalido", status: 401 },
+        { includes: "Limite de tentativas excedido", status: 429 },
+      ],
     });
   }
 }

@@ -113,11 +113,15 @@ Crie um arquivo .env com:
 ```bash
 DATABASE_URL="postgresql://..."
 GEMINI_API_KEY="..."
-RESEND_API_KEY="..."        # opcional para envio real de email
-EMAIL_FROM="no-reply@..."   # opcional para envio real de email
+SMTP_HOST="smtps.uhserver.com"
+SMTP_PORT="465"
+SMTP_SECURE="true"
+SMTP_USER="vendas1@amafil.com.br"
+SMTP_PASS="..."
+EMAIL_FROM="Amafil <vendas1@amafil.com.br>"
 ```
 
-Sem RESEND_API_KEY e EMAIL_FROM, o envio de codigo funciona em modo desenvolvimento com codigo de teste retornado no frontend.
+Sem configuracao SMTP completa, o envio de codigo funciona em modo desenvolvimento com codigo de teste retornado no frontend.
 
 ## Desenvolvimento
 

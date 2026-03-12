@@ -9,6 +9,27 @@ import { registerFormSchema } from "@/lib/validation/auth";
 
 type Mode = "login" | "register" | "forgot";
 
+type ApiResponsePayload = {
+  message?: string;
+  detail?: string;
+  devCode?: string;
+};
+
+async function parseApiResponse(response: Response): Promise<ApiResponsePayload> {
+  const raw = await response.text();
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw) as ApiResponsePayload;
+  } catch {
+    return {
+      detail: "Resposta invalida do servidor.",
+    };
+  }
+}
+
 type AuthUser = {
   id: string;
   email: string;
@@ -31,17 +52,25 @@ function getRegisterValidationMessage(input: {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Exclude<Mode, "forgot">>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [resetCode, setResetCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [devCodeHint, setDevCodeHint] = useState<string | null>(null);
+
+  const [showForgotFlow, setShowForgotFlow] = useState(false);
+  const [forgotStep, setForgotStep] = useState<"request" | "reset">("request");
+  const [recoverEmail, setRecoverEmail] = useState("");
+  const [recoverCode, setRecoverCode] = useState("");
+  const [recoverNewPassword, setRecoverNewPassword] = useState("");
+  const [recoverConfirmPassword, setRecoverConfirmPassword] = useState("");
+  const [recoverLoading, setRecoverLoading] = useState(false);
+  const [recoverMessage, setRecoverMessage] = useState<string | null>(null);
+  const [recoverError, setRecoverError] = useState<string | null>(null);
+  const [recoverDevCodeHint, setRecoverDevCodeHint] = useState<string | null>(null);
 
   useEffect(() => {
     async function checkSession() {
@@ -119,45 +148,60 @@ export default function LoginPage() {
   }
 
   async function handleForgotRequest() {
-    setIsLoading(true);
-    setError(null);
-    setMessage(null);
-    setDevCodeHint(null);
+    setRecoverLoading(true);
+    setRecoverError(null);
+    setRecoverMessage(null);
+    setRecoverDevCodeHint(null);
 
     try {
       const response = await fetch("/api/auth/forgot-password/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: recoverEmail }),
       });
 
-      const data = (await response.json()) as { message?: string; detail?: string; devCode?: string };
+      const data = await parseApiResponse(response);
       if (!response.ok) {
         throw new Error(data.detail ?? data.message ?? "Falha ao solicitar recuperacao.");
       }
 
-      setMessage(data.message ?? "Codigo enviado.");
-      setDevCodeHint(data.devCode ?? null);
+      setRecoverMessage(data.message ?? "Codigo enviado.");
+      setRecoverDevCodeHint(data.devCode ?? null);
+      setForgotStep("reset");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Falha ao solicitar recuperacao.");
+      setRecoverError(requestError instanceof Error ? requestError.message : "Falha ao solicitar recuperacao.");
     } finally {
-      setIsLoading(false);
+      setRecoverLoading(false);
     }
   }
 
   async function handleForgotReset() {
-    setIsLoading(true);
-    setError(null);
-    setMessage(null);
+    if (recoverNewPassword.length < 8) {
+      setRecoverError("A nova senha precisa ter pelo menos 8 caracteres.");
+      return;
+    }
+
+    if (recoverNewPassword !== recoverConfirmPassword) {
+      setRecoverError("A confirmacao da nova senha nao confere.");
+      return;
+    }
+
+    setRecoverLoading(true);
+    setRecoverError(null);
+    setRecoverMessage(null);
 
     try {
       const response = await fetch("/api/auth/forgot-password/reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code: resetCode, newPassword }),
+        body: JSON.stringify({
+          email: recoverEmail,
+          code: recoverCode,
+          newPassword: recoverNewPassword,
+        }),
       });
 
-      const data = (await response.json()) as { message?: string; detail?: string };
+      const data = await parseApiResponse(response);
       if (!response.ok) {
         throw new Error(data.detail ?? data.message ?? "Falha ao redefinir senha.");
       }
@@ -166,12 +210,16 @@ export default function LoginPage() {
       setMode("login");
       setPassword("");
       setConfirmPassword("");
-      setResetCode("");
-      setNewPassword("");
+      setShowForgotFlow(false);
+      setForgotStep("request");
+      setRecoverCode("");
+      setRecoverNewPassword("");
+      setRecoverConfirmPassword("");
+      setRecoverDevCodeHint(null);
     } catch (resetError) {
-      setError(resetError instanceof Error ? resetError.message : "Falha ao redefinir senha.");
+      setRecoverError(resetError instanceof Error ? resetError.message : "Falha ao redefinir senha.");
     } finally {
-      setIsLoading(false);
+      setRecoverLoading(false);
     }
   }
 
@@ -207,6 +255,7 @@ export default function LoginPage() {
                 setMode("login");
                 setError(null);
                 setMessage(null);
+                setShowForgotFlow(false);
               }}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 mode === "login" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-200 dark:hover:bg-zinc-700"
@@ -220,25 +269,13 @@ export default function LoginPage() {
                 setMode("register");
                 setError(null);
                 setMessage(null);
+                setShowForgotFlow(false);
               }}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 mode === "register" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-200 dark:hover:bg-zinc-700"
               }`}
             >
               Cadastrar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("forgot");
-                setError(null);
-                setMessage(null);
-              }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                mode === "forgot" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-200 dark:hover:bg-zinc-700"
-              }`}
-            >
-              Esqueci senha
             </button>
           </div>
 
@@ -280,40 +317,8 @@ export default function LoginPage() {
               />
             ) : null}
 
-            {mode === "forgot" ? (
-              <>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={resetCode}
-                    onChange={(event) => setResetCode(event.target.value.replace(/\D/g, ""))}
-                    placeholder="Codigo de 6 digitos"
-                    className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleForgotRequest}
-                    disabled={isLoading}
-                    className="shrink-0 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                  >
-                    Enviar codigo
-                  </button>
-                </div>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  placeholder="Nova senha"
-                  className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
-                />
-              </>
-            ) : null}
-
             {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
             {error ? <p className="text-sm text-red-700">{error}</p> : null}
-            {devCodeHint ? <p className="text-xs text-zinc-500">Ambiente dev: codigo {devCodeHint}</p> : null}
 
             {mode === "login" ? (
               <button
@@ -337,15 +342,98 @@ export default function LoginPage() {
               </button>
             ) : null}
 
-            {mode === "forgot" ? (
-              <button
-                type="button"
-                onClick={handleForgotReset}
-                disabled={isLoading}
-                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {isLoading ? "Redefinindo..." : "Redefinir senha"}
-              </button>
+            {mode === "login" ? (
+              <p className="-mt-1 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                Esqueceu sua senha?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotFlow((current) => !current);
+                    setRecoverError(null);
+                    setRecoverMessage(null);
+                  }}
+                  className="font-medium text-zinc-700 underline underline-offset-2 dark:text-zinc-300"
+                >
+                  Recuperar acesso
+                </button>
+              </p>
+            ) : null}
+
+            {mode === "login" && showForgotFlow ? (
+              <section className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+                <p className="text-xs font-semibold tracking-wide text-zinc-600 uppercase dark:text-zinc-300">
+                  Recuperacao de senha
+                </p>
+
+                {forgotStep === "request" ? (
+                  <>
+                    <input
+                      type="email"
+                      value={recoverEmail}
+                      onChange={(event) => setRecoverEmail(event.target.value)}
+                      placeholder="Email da conta"
+                      className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleForgotRequest}
+                      disabled={recoverLoading}
+                      className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      {recoverLoading ? "Enviando..." : "Enviar codigo"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={recoverCode}
+                      onChange={(event) => setRecoverCode(event.target.value.replace(/\D/g, ""))}
+                      placeholder="Codigo de 6 digitos"
+                      className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
+                    />
+                    <input
+                      type="password"
+                      value={recoverNewPassword}
+                      onChange={(event) => setRecoverNewPassword(event.target.value)}
+                      placeholder="Nova senha"
+                      className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
+                    />
+                    <input
+                      type="password"
+                      value={recoverConfirmPassword}
+                      onChange={(event) => setRecoverConfirmPassword(event.target.value)}
+                      placeholder="Confirmar nova senha"
+                      className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setForgotStep("request")}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        Reenviar codigo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleForgotReset}
+                        disabled={recoverLoading}
+                        className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      >
+                        {recoverLoading ? "Redefinindo..." : "Redefinir senha"}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {recoverMessage ? <p className="text-sm text-emerald-700">{recoverMessage}</p> : null}
+                {recoverError ? <p className="text-sm text-red-700">{recoverError}</p> : null}
+                {recoverDevCodeHint ? (
+                  <p className="text-xs text-zinc-500">Ambiente local: codigo {recoverDevCodeHint}</p>
+                ) : null}
+              </section>
             ) : null}
 
             <p className="pt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
