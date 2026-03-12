@@ -30,20 +30,31 @@ type AnalysisResponse = {
   }>;
   message?: string;
   detail?: string;
+  rawText?: string;
 };
 
-async function toBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
+type HistorySeedResponse = {
+  message?: string;
+  detail?: string;
+  client?: {
+    code?: string;
+  };
+  clientsLoaded?: number;
+  clientCodes?: string[];
+  purchasesLoaded?: number;
+};
 
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
+async function readResponseBody<T>(response: Response): Promise<T & { rawText?: string }> {
+  const text = await response.text();
+  if (!text) {
+    return {} as T & { rawText?: string };
   }
 
-  return btoa(binary);
+  try {
+    return JSON.parse(text) as T & { rawText?: string };
+  } catch {
+    return { rawText: text } as T & { rawText?: string };
+  }
 }
 
 export default function Home() {
@@ -54,14 +65,52 @@ export default function Home() {
   const [clientId, setClientId] = useState("client-demo");
   const [fileName, setFileName] = useState("pedido-demo.pdf");
   const [persistResult, setPersistResult] = useState(true);
-  const [pdfBase64, setPdfBase64] = useState<string | undefined>(undefined);
-  const [parsedItemsText, setParsedItemsText] = useState(
-    JSON.stringify([{ rawDescription: "Cafe 500g", quantity: 28, confidence: 0.95 }], null, 2),
-  );
+  const [pdfFile, setPdfFile] = useState<File | undefined>(undefined);
+  const [useManualJson, setUseManualJson] = useState(false);
+  const [parsedItemsText, setParsedItemsText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [seedStatus, setSeedStatus] = useState<string | null>(null);
+  const [historyPayloadText, setHistoryPayloadText] = useState(
+    JSON.stringify(
+      {
+        client: {
+          code: "cliente-real-001",
+          name: "Mercado Central Matriz",
+          region: "SP",
+        },
+        products: [
+          {
+            sku: "CAFE-500",
+            name: "Cafe Torrado 500g",
+            aliases: ["cafe 500", "cafe tradicional 500g"],
+          },
+          {
+            sku: "ACUCAR-1K",
+            name: "Acucar Cristal 1kg",
+            aliases: ["acucar 1kg", "acucar cristal 1kg"],
+          },
+        ],
+        purchases: [
+          { sku: "CAFE-500", quantity: 22, soldAt: "2026-01-05" },
+          { sku: "CAFE-500", quantity: 24, soldAt: "2026-02-09" },
+          { sku: "ACUCAR-1K", quantity: 10, soldAt: "2026-01-28" },
+        ],
+        replaceHistory: true,
+      },
+      null,
+      2,
+    ),
+  );
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyCsvFile, setHistoryCsvFile] = useState<File | undefined>(undefined);
+  const [historyCsvReplace, setHistoryCsvReplace] = useState(true);
+  const [historyCsvLoading, setHistoryCsvLoading] = useState(false);
+  const [historyCsvStatus, setHistoryCsvStatus] = useState<string | null>(null);
+  const [historyCsvError, setHistoryCsvError] = useState<string | null>(null);
 
   const parsedItemsPreview = useMemo(() => {
     try {
@@ -76,7 +125,7 @@ export default function Home() {
     async function loadSession() {
       try {
         const response = await fetch("/api/auth/me");
-        const data = (await response.json()) as { user?: AuthUser | null };
+        const data = await readResponseBody<{ user?: AuthUser | null }>(response);
 
         if (!data.user) {
           router.replace("/login");
@@ -102,13 +151,12 @@ export default function Home() {
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) {
-      setPdfBase64(undefined);
+      setPdfFile(undefined);
       return;
     }
 
     setFileName(file.name);
-    const encoded = await toBase64(file);
-    setPdfBase64(encoded);
+    setPdfFile(file);
   }
 
   async function handleSeed() {
@@ -117,7 +165,7 @@ export default function Home() {
 
     try {
       const response = await fetch("/api/seed", { method: "POST" });
-      const data = (await response.json()) as AnalysisResponse;
+      const data = await readResponseBody<AnalysisResponse>(response);
 
       if (!response.ok) {
         throw new Error(data.detail ?? data.message ?? "Falha ao executar seed.");
@@ -130,6 +178,88 @@ export default function Home() {
     }
   }
 
+  async function handleLoadHistory() {
+    setHistoryLoading(true);
+    setHistoryStatus(null);
+    setHistoryError(null);
+
+    try {
+      const payload = JSON.parse(historyPayloadText) as Record<string, unknown>;
+      const response = await fetch("/api/seed/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await readResponseBody<HistorySeedResponse>(response);
+      if (!response.ok) {
+        throw new Error(data.detail ?? data.message ?? "Falha ao carregar historico.");
+      }
+
+      const clientCode = data.client?.code ? ` Cliente: ${data.client.code}.` : "";
+      const purchasesLoaded =
+        typeof data.purchasesLoaded === "number" ? ` Compras carregadas: ${data.purchasesLoaded}.` : "";
+      setHistoryStatus(`${data.message ?? "Historico carregado com sucesso."}${clientCode}${purchasesLoaded}`);
+    } catch (historySeedError) {
+      setHistoryError(historySeedError instanceof Error ? historySeedError.message : "Erro ao carregar historico.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function handleHistoryCsvUpload() {
+    if (!historyCsvFile) {
+      setHistoryCsvError("Selecione um arquivo CSV para carregar.");
+      return;
+    }
+
+    if (historyCsvFile.size > 20 * 1024 * 1024) {
+      setHistoryCsvError("Arquivo CSV muito grande. Limite atual: 20MB.");
+      return;
+    }
+
+    setHistoryCsvLoading(true);
+    setHistoryCsvStatus(null);
+    setHistoryCsvError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("csvFile", historyCsvFile);
+      formData.append("replaceHistory", String(historyCsvReplace));
+
+      const response = await fetch("/api/seed/history/csv", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await readResponseBody<HistorySeedResponse>(response);
+      if (!response.ok) {
+        if (response.status === 413) {
+          throw new Error("Arquivo CSV excede o limite de upload. Tente dividir o arquivo em partes menores.");
+        }
+        throw new Error(data.detail ?? data.message ?? "Falha ao carregar historico via CSV.");
+      }
+
+      const clientCode = data.client?.code
+        ? ` Cliente: ${data.client.code}.`
+        : data.clientsLoaded
+          ? ` Clientes carregados: ${data.clientsLoaded}.`
+          : "";
+      const clientCodes = Array.isArray(data.clientCodes) && data.clientCodes.length
+        ? ` Codigos: ${data.clientCodes.slice(0, 5).join(", ")}${data.clientCodes.length > 5 ? "..." : ""}.`
+        : "";
+      const purchasesLoaded =
+        typeof data.purchasesLoaded === "number" ? ` Compras carregadas: ${data.purchasesLoaded}.` : "";
+      setHistoryCsvStatus(
+        `${data.message ?? "Historico CSV carregado com sucesso."}${clientCode}${clientCodes}${purchasesLoaded}`,
+      );
+    } catch (csvError) {
+      setHistoryCsvError(csvError instanceof Error ? csvError.message : "Erro ao carregar CSV.");
+    } finally {
+      setHistoryCsvLoading(false);
+    }
+  }
+
   async function handleSubmit() {
     setIsLoading(true);
     setError(null);
@@ -137,7 +267,7 @@ export default function Home() {
 
     try {
       let parsedItems: ParsedItemInput[] | undefined;
-      if (parsedItemsText.trim()) {
+      if (!pdfFile && useManualJson && parsedItemsText.trim()) {
         const parsed = JSON.parse(parsedItemsText) as ParsedItemInput[];
         if (!Array.isArray(parsed)) {
           throw new Error("parsedItems deve ser um array JSON.");
@@ -145,14 +275,40 @@ export default function Home() {
         parsedItems = parsed;
       }
 
-      const response = await fetch("/api/analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, fileName, persistResult, pdfBase64, parsedItems }),
-      });
+      const response = pdfFile
+        ? await (async () => {
+            const formData = new FormData();
+            formData.append("clientId", clientId);
+            formData.append("fileName", fileName);
+            formData.append("persistResult", String(persistResult));
+            formData.append("pdfFile", pdfFile);
 
-      const data = (await response.json()) as AnalysisResponse;
+            return fetch("/api/analysis", {
+              method: "POST",
+              body: formData,
+            });
+          })()
+        : await fetch("/api/analysis", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clientId, fileName, persistResult, parsedItems }),
+          });
+
+      const data = await readResponseBody<AnalysisResponse>(response);
       if (!response.ok) {
+        if (response.status === 413) {
+          throw new Error("PDF muito grande para envio. Tente um arquivo menor ou use parsedItems em JSON.");
+        }
+
+        if (!data.message && !data.detail) {
+          const rawSnippet = typeof data.rawText === "string" ? data.rawText.slice(0, 180).replace(/\s+/g, " ").trim() : "";
+          throw new Error(
+            rawSnippet
+              ? `Falha ao processar analise (HTTP ${response.status}). Resposta: ${rawSnippet}`
+              : `Falha ao processar analise (HTTP ${response.status}, resposta vazia do servidor).`,
+          );
+        }
+
         throw new Error(data.detail ?? data.message ?? "Falha ao processar analise.");
       }
 
@@ -221,15 +377,32 @@ export default function Home() {
             />
           </label>
 
-          <label className="lg:col-span-2 flex flex-col gap-2 text-sm text-zinc-700">
-            Itens do pedido (JSON opcional)
-            <textarea
-              className="min-h-44 rounded-xl border border-zinc-300 px-3 py-2 font-mono text-xs outline-none transition focus:border-zinc-900"
-              value={parsedItemsText}
-              onChange={(event) => setParsedItemsText(event.target.value)}
-            />
-            <span className="text-xs text-zinc-500">Itens no JSON: {parsedItemsPreview}</span>
-          </label>
+          <div className="lg:col-span-2 space-y-2">
+            <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+              <input
+                type="checkbox"
+                checked={useManualJson}
+                onChange={(event) => setUseManualJson(event.target.checked)}
+              />
+              Usar entrada manual em JSON (modo avancado)
+            </label>
+
+            {useManualJson ? (
+              <label className="flex flex-col gap-2 text-sm text-zinc-700">
+                Itens do pedido (JSON)
+                <textarea
+                  className="min-h-44 rounded-xl border border-zinc-300 px-3 py-2 font-mono text-xs outline-none transition focus:border-zinc-900"
+                  value={parsedItemsText}
+                  onChange={(event) => setParsedItemsText(event.target.value)}
+                  placeholder='[{"rawDescription":"Cafe 500g","quantity":10,"confidence":0.9}]'
+                />
+                <span className="text-xs text-zinc-500">Itens no JSON: {parsedItemsPreview}</span>
+                <span className="text-xs text-zinc-500">Se houver PDF enviado, o sistema prioriza o PDF.</span>
+              </label>
+            ) : (
+              <p className="text-xs text-zinc-500">Modo simples ativo: o sistema usa o PDF enviado para extrair os itens automaticamente.</p>
+            )}
+          </div>
 
           <label className="lg:col-span-2 inline-flex items-center gap-2 text-sm text-zinc-700">
             <input
@@ -260,6 +433,77 @@ export default function Home() {
 
           {seedStatus ? <p className="lg:col-span-2 text-sm text-emerald-700">{seedStatus}</p> : null}
           {error ? <p className="lg:col-span-2 text-sm text-red-700">{error}</p> : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+          <h2 className="text-sm font-semibold tracking-wide text-zinc-500 uppercase">Carga de historico real</h2>
+          <p className="mt-3 text-sm text-zinc-600">
+            Cole os dados de clientes, produtos e compras para alimentar a base usada na analise dos pedidos.
+          </p>
+
+          <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700">
+            <p className="font-semibold">Upload CSV (recomendado)</p>
+            <p className="mt-1">Cabecalho esperado:</p>
+            <p className="mt-1 font-mono">clientCode,clientName,region,sku,productName,aliases,quantity,soldAt</p>
+            <p className="mt-1">`aliases` pode usar `|` para multiplos valores. Exemplo: cafe 500|cafe tradicional 500g</p>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <label className="flex flex-col gap-2 text-sm text-zinc-700">
+              Arquivo CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => setHistoryCsvFile(event.target.files?.[0])}
+                className="rounded-xl border border-zinc-300 px-3 py-2 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-200 file:px-3 file:py-1 file:text-sm file:font-semibold"
+              />
+            </label>
+
+            <label className="inline-flex items-center gap-2 self-end text-sm text-zinc-700">
+              <input
+                type="checkbox"
+                checked={historyCsvReplace}
+                onChange={(event) => setHistoryCsvReplace(event.target.checked)}
+              />
+              Substituir historico existente para os SKUs do arquivo
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleHistoryCsvUpload}
+              disabled={historyCsvLoading}
+              className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60"
+            >
+              {historyCsvLoading ? "Importando CSV..." : "Importar CSV no banco"}
+            </button>
+          </div>
+
+          {historyCsvStatus ? <p className="mt-2 text-sm text-emerald-700">{historyCsvStatus}</p> : null}
+          {historyCsvError ? <p className="mt-2 text-sm text-red-700">{historyCsvError}</p> : null}
+
+          <div className="mt-3 space-y-3">
+            <textarea
+              className="min-h-44 w-full rounded-xl border border-zinc-300 px-3 py-2 font-mono text-xs outline-none transition focus:border-zinc-900"
+              value={historyPayloadText}
+              onChange={(event) => setHistoryPayloadText(event.target.value)}
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleLoadHistory}
+                disabled={historyLoading}
+                className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60"
+              >
+                {historyLoading ? "Carregando historico..." : "Carregar historico no banco"}
+              </button>
+            </div>
+
+            {historyStatus ? <p className="text-sm text-emerald-700">{historyStatus}</p> : null}
+            {historyError ? <p className="text-sm text-red-700">{historyError}</p> : null}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5">

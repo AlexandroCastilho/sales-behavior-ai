@@ -149,7 +149,9 @@ async function saveAnalysisResult(params: {
 
 export async function analyzeOrder(input: AnalyzeOrderInput): Promise<AnalysisResult> {
 	const resolvedClientId = await resolveClientId(input.clientId);
-	const parsedFromPdf = input.parsedItems ?? (await parseOrderPdf({ fileName: input.fileName, pdfBase64: input.pdfBase64 }));
+	const parsedFromPdf = input.pdfBase64
+		? await parseOrderPdf({ fileName: input.fileName, pdfBase64: input.pdfBase64 })
+		: (input.parsedItems ?? []);
 	const matchedItems = await matchOrderItemsToProducts(parsedFromPdf);
 
 	const itemResults = await Promise.all(

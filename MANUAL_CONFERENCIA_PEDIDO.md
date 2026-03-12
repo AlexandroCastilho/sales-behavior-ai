@@ -91,6 +91,84 @@ Se GEMINI_API_KEY nao estiver configurado, o sistema usa fallback sem IA para ma
 - GET /api/auth/me
 - POST /api/auth/logout
 
+## 8.1 Carga de dados reais de historico (base para analise)
+
+Use este endpoint para inserir/atualizar clientes, produtos e historico de compras reais.
+
+- POST /api/seed/history
+   - body exemplo:
+
+```json
+{
+   "client": {
+      "code": "cliente-real-001",
+      "name": "Mercado Central Matriz",
+      "region": "SP"
+   },
+   "products": [
+      {
+         "sku": "CAFE-500",
+         "name": "Cafe Torrado 500g",
+         "aliases": ["cafe 500", "cafe tradicional 500g"]
+      },
+      {
+         "sku": "ACUCAR-1K",
+         "name": "Acucar Cristal 1kg",
+         "aliases": ["acucar 1kg", "acucar cristal 1kg"]
+      }
+   ],
+   "purchases": [
+      { "sku": "CAFE-500", "quantity": 22, "soldAt": "2026-01-05" },
+      { "sku": "CAFE-500", "quantity": 24, "soldAt": "2026-02-09" },
+      { "sku": "ACUCAR-1K", "quantity": 10, "soldAt": "2026-01-28" }
+   ],
+   "replaceHistory": true
+}
+```
+
+Observacoes:
+
+- `replaceHistory=true` substitui historico antigo daquele cliente+produtos informados.
+- A analise cruza o pedido com esse historico para calcular media, picos e risco.
+- O parecer da IA recebe o resultado desse cruzamento (findings + contexto historico).
+
+### Carga via CSV
+
+Tambem e possivel importar via CSV no endpoint:
+
+- POST /api/seed/history/csv
+   - form-data:
+      - `csvFile`: arquivo .csv
+      - `replaceHistory`: `true` ou `false` (opcional, padrao `true`)
+
+Cabecalho esperado no CSV:
+
+```csv
+clientCode,clientName,region,sku,productName,aliases,quantity,soldAt
+```
+
+Exemplo:
+
+```csv
+clientCode,clientName,region,sku,productName,aliases,quantity,soldAt
+cliente-real-001,Mercado Central Matriz,SP,CAFE-500,Cafe Torrado 500g,"cafe 500|cafe tradicional 500g",22,2026-01-05
+cliente-real-001,Mercado Central Matriz,SP,CAFE-500,Cafe Torrado 500g,"cafe 500|cafe tradicional 500g",24,2026-02-09
+cliente-real-001,Mercado Central Matriz,SP,ACUCAR-1K,Acucar Cristal 1kg,"acucar 1kg|acucar cristal 1kg",10,2026-01-28
+```
+
+Observacoes CSV:
+
+- O arquivo deve conter apenas um cliente por importacao (`clientCode` unico).
+- `aliases` e opcional e aceita multiplos valores separados por `|`.
+- `quantity` deve ser numero positivo.
+- `soldAt` deve ser data valida (`YYYY-MM-DD` recomendado).
+
+Modelo tambem suportado (planilha de parceiros):
+
+- Cabecalhos com campos como `CODIGO PARCEIRO`, `NOME PARCEIRO`, `COD. PRODUTO`, `DESC. PRODUTO`, `Date (dtUltCompra)` e colunas repetidas de `PESO TOTAL FAT`.
+- Nesse formato, cada coluna `PESO TOTAL FAT` e tratada como historico de compra por periodo para o produto.
+- O sistema aceita multiplos clientes no mesmo arquivo CSV.
+
 ## 9. Solucao de problemas
 
 - 401 Nao autenticado: faca login antes de chamar /api/analysis.
