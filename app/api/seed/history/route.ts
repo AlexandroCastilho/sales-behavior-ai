@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { createErrorResponse } from "@/lib/api-error";
 import { getPrismaClient } from "@/lib/prisma";
 
 const productSchema = z.object({
@@ -154,21 +155,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const message = error instanceof Error ? error.message : "Erro desconhecido";
-    const isDatabaseUnavailable =
-      message.includes("DATABASE_URL") ||
-      message.includes("P1001") ||
-      message.includes("Can't reach database server") ||
-      message.includes("ECONNREFUSED");
-
-    return NextResponse.json(
-      {
-        message: "Falha ao carregar historico no banco.",
-        detail: isDatabaseUnavailable
-          ? "Banco indisponivel. Verifique DATABASE_URL e conectividade do Postgres."
-          : message,
-      },
-      { status: isDatabaseUnavailable ? 503 : 500 },
-    );
+    return createErrorResponse({
+      error,
+      message: "Falha ao carregar historico no banco.",
+    });
   }
 }

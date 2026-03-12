@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 
 import { SESSION_COOKIE_NAME } from "@/lib/auth";
+import { createErrorResponse } from "@/lib/api-error";
 import { analyzeOrder } from "@/services/analysis.service";
 import { getUserFromSessionToken } from "@/services/auth.service";
 
@@ -92,6 +93,16 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        {
+          message: "Payload invalido para analise.",
+          detail: "JSON malformado na requisicao.",
+        },
+        { status: 400 },
+      );
+    }
+
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         {
@@ -102,12 +113,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      {
-        message: "Falha ao processar analise.",
-        detail: error instanceof Error ? error.message : "Erro interno inesperado.",
-      },
-      { status: 500 },
-    );
+    return createErrorResponse({
+      error,
+      message: "Falha ao processar analise.",
+    });
   }
 }

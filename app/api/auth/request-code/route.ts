@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { createErrorResponse } from "@/lib/api-error";
 import { requestEmailLoginCode } from "@/services/auth.service";
 
 const bodySchema = z.object({
@@ -29,15 +30,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const detail = error instanceof Error ? error.message : "Erro desconhecido";
-    const status = detail.includes("DATABASE_URL") ? 503 : 500;
-
-    return NextResponse.json(
-      {
-        message: "Falha ao solicitar codigo de login.",
-        detail,
-      },
-      { status },
-    );
+    return createErrorResponse({
+      error,
+      message: "Falha ao solicitar codigo de login.",
+    });
   }
 }

@@ -8,6 +8,18 @@ import { matchOrderItemsToProducts } from "./product-match.service";
 import { parseOrderPdf } from "./pdf-parser.service";
 import { getClientProductHistory } from "./sales-history.service";
 
+const MIN_PURCHASES_FOR_STRONG_HISTORY = 2;
+const QUANTITY_SPIKE_MULTIPLIER = 2.5;
+
+const RISK_PRIORITY: Record<RiskLevel, number> = {
+	LOW: 0,
+	INCONCLUSIVE: 1,
+	MEDIUM: 2,
+	HIGH: 3,
+};
+
+type ItemHistory = Awaited<ReturnType<typeof getClientProductHistory>>;
+
 async function resolveClientId(clientIdOrCode: string): Promise<string> {
 	try {
 		const prisma = getPrismaClient();
@@ -58,61 +70,108 @@ function determineItemRisk(findings: RuleFinding[]): RiskLevel {
 }
 
 function determineOverallRisk(items: AnalysisItemResult[]): RiskLevel {
-	const risks = items.map((item) => item.itemRisk);
-	if (risks.includes("HIGH")) return "HIGH";
-	if (risks.includes("MEDIUM")) return "MEDIUM";
-	if (risks.includes("INCONCLUSIVE")) return "INCONCLUSIVE";
-	return "LOW";
+	let highestRisk: RiskLevel = "LOW";
+
+	for (const item of items) {
+		if (RISK_PRIORITY[item.itemRisk] > RISK_PRIORITY[highestRisk]) {
+			highestRisk = item.itemRisk;
+		}
+	}
+
+	return highestRisk;
 }
 
-function buildRuleFindings(
-	item: ParsedOrderItem,
-	history?: Awaited<ReturnType<typeof getClientProductHistory>>,
-): RuleFinding[] {
+function createFinding(
+	code: RuleFinding["code"],
+	message: string,
+	severity: RuleFinding["severity"],
+): RuleFinding {
+	return { code, message, severity };
+}
+
+function buildRuleFindings(item: ParsedOrderItem, history?: ItemHistory): RuleFinding[] {
 	const findings: RuleFinding[] = [];
 
 	if (!item.matchedProductId) {
-		findings.push({
-			code: "NEW_PRODUCT_FOR_CLIENT",
-			message: "Produto nao identificado no cadastro do cliente.",
-			severity: "WARN",
-		});
+		findings.push(
+			createFinding(
+				"NEW_PRODUCT_FOR_CLIENT",
+				"Produto nao identificado no cadastro do cliente.",
+				"WARN",
+			),
+		);
 		return findings;
 	}
 
 	if (!history) {
-		findings.push({
-			code: "NEW_PRODUCT_FOR_CLIENT",
-			message: "Produto nunca comprado por este cliente.",
-			severity: "WARN",
-		});
-		findings.push({
-			code: "INSUFFICIENT_HISTORY",
-			message: "Sem historico suficiente para conclusao confiavel.",
-			severity: "INFO",
-		});
+		findings.push(
+			createFinding(
+				"NEW_PRODUCT_FOR_CLIENT",
+				"Produto nunca comprado por este cliente.",
+				"WARN",
+			),
+		);
+		findings.push(
+			createFinding(
+				"INSUFFICIENT_HISTORY",
+				"Sem historico suficiente para conclusao confiavel.",
+				"INFO",
+			),
+		);
 		return findings;
 	}
 
-	if (history.purchaseCount < 2) {
-		findings.push({
-			code: "INSUFFICIENT_HISTORY",
-			message: "Historico insuficiente: menos de 2 compras anteriores.",
-			severity: "INFO",
-		});
+	if (history.purchaseCount < MIN_PURCHASES_FOR_STRONG_HISTORY) {
+		findings.push(
+			createFinding(
+				"INSUFFICIENT_HISTORY",
+				"Historico insuficiente: menos de 2 compras anteriores.",
+				"INFO",
+			),
+		);
 	}
 
-	if (item.quantity > history.averageQuantity * 2.5) {
-		findings.push({
-			code: "QUANTITY_SPIKE",
-			message: `Quantidade ${item.quantity} acima de 2.5x da media historica (${history.averageQuantity.toFixed(
-				2,
-			)}).`,
-			severity: "CRITICAL",
-		});
+	if (item.quantity > history.averageQuantity * QUANTITY_SPIKE_MULTIPLIER) {
+		findings.push(
+			createFinding(
+				"QUANTITY_SPIKE",
+				`Quantidade ${item.quantity} acima de ${QUANTITY_SPIKE_MULTIPLIER}x da media historica (${history.averageQuantity.toFixed(
+					2,
+				)}).`,
+				"CRITICAL",
+			),
+		);
 	}
 
 	return findings;
+}
+
+async function resolveInputItems(input: AnalyzeOrderInput): Promise<ParsedOrderItem[]> {
+	if (input.pdfBase64) {
+		return parseOrderPdf({ fileName: input.fileName, pdfBase64: input.pdfBase64 });
+	}
+
+	return input.parsedItems ?? [];
+}
+
+async function buildItemResult(params: {
+	item: ParsedOrderItem;
+	clientId: string;
+}): Promise<AnalysisItemResult> {
+	const { item, clientId } = params;
+
+	const history = item.matchedProductId
+		? await getClientProductHistory(clientId, item.matchedProductId)
+		: undefined;
+
+	const findings = buildRuleFindings(item, history);
+
+	return {
+		item,
+		history,
+		findings,
+		itemRisk: determineItemRisk(findings),
+	};
 }
 
 async function saveAnalysisResult(params: {
@@ -149,26 +208,11 @@ async function saveAnalysisResult(params: {
 
 export async function analyzeOrder(input: AnalyzeOrderInput): Promise<AnalysisResult> {
 	const resolvedClientId = await resolveClientId(input.clientId);
-	const parsedFromPdf = input.pdfBase64
-		? await parseOrderPdf({ fileName: input.fileName, pdfBase64: input.pdfBase64 })
-		: (input.parsedItems ?? []);
-	const matchedItems = await matchOrderItemsToProducts(parsedFromPdf);
+	const parsedItems = await resolveInputItems(input);
+	const matchedItems = await matchOrderItemsToProducts(parsedItems);
 
 	const itemResults = await Promise.all(
-		matchedItems.map(async (item) => {
-			const history = item.matchedProductId
-				? await getClientProductHistory(resolvedClientId, item.matchedProductId)
-				: undefined;
-
-			const findings = buildRuleFindings(item, history);
-
-			return {
-				item,
-				history,
-				findings,
-				itemRisk: determineItemRisk(findings),
-			} satisfies AnalysisItemResult;
-		}),
+		matchedItems.map((item) => buildItemResult({ item, clientId: resolvedClientId })),
 	);
 
 	const overallRisk = determineOverallRisk(itemResults);

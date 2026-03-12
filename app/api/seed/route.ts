@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { createErrorResponse } from "@/lib/api-error";
 import { getPrismaClient } from "@/lib/prisma";
 
 export async function POST() {
@@ -76,22 +77,9 @@ export async function POST() {
       products: [cafe.id, acucar.id],
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro desconhecido";
-    const isDatabaseUnavailable =
-      message.includes("DATABASE_URL") ||
-      message.includes("P1001") ||
-      message.includes("Can't reach database server") ||
-      message.includes("ECONNREFUSED");
-    const status = isDatabaseUnavailable ? 503 : 500;
-
-    return NextResponse.json(
-      {
-        message: "Falha ao executar seed.",
-        detail: isDatabaseUnavailable
-          ? "Banco indisponivel. Verifique DATABASE_URL e conectividade do Postgres."
-          : message,
-      },
-      { status },
-    );
+    return createErrorResponse({
+      error,
+      message: "Falha ao executar seed.",
+    });
   }
 }

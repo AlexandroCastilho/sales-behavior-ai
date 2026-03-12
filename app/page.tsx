@@ -1,10 +1,13 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AnalysisResultSection } from "@/components/home/analysis-result-section";
+import { AnalysisFormSection } from "@/components/home/analysis-form-section";
+import { HistoryImportSection } from "@/components/home/history-import-section";
 import { HomeHeader } from "@/components/home/home-header";
+import { SessionLoader } from "@/components/home/session-loader";
 import { AnalysisResponse } from "@/types/home";
 
 type ParsedItemInput = {
@@ -98,15 +101,6 @@ export default function Home() {
   const [historyCsvLoading, setHistoryCsvLoading] = useState(false);
   const [historyCsvStatus, setHistoryCsvStatus] = useState<string | null>(null);
   const [historyCsvError, setHistoryCsvError] = useState<string | null>(null);
-
-  const parsedItemsPreview = useMemo(() => {
-    try {
-      const parsed = JSON.parse(parsedItemsText) as ParsedItemInput[];
-      return Array.isArray(parsed) ? parsed.length : 0;
-    } catch {
-      return 0;
-    }
-  }, [parsedItemsText]);
 
   useEffect(() => {
     async function loadSession() {
@@ -308,11 +302,7 @@ export default function Home() {
   }
 
   if (checkingSession) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-zinc-100 dark:bg-zinc-950">
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">Carregando ambiente...</p>
-      </main>
-    );
+    return <SessionLoader />;
   }
 
   return (
@@ -320,163 +310,40 @@ export default function Home() {
       <section className="mx-auto w-full max-w-6xl space-y-6 dark:text-zinc-100">
         <HomeHeader email={authUser?.email} onLogout={handleLogout} />
 
-        <section className="grid grid-cols-1 gap-4 rounded-2xl border border-zinc-200 bg-white p-5 lg:grid-cols-2 dark:border-zinc-800 dark:bg-zinc-900">
-          <label className="flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-            Cliente (id ou codigo)
-            <input
-              className="rounded-xl border border-zinc-300 px-3 py-2 outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
-              value={clientId}
-              onChange={(event) => setClientId(event.target.value)}
-            />
-          </label>
+        <AnalysisFormSection
+          clientId={clientId}
+          onClientIdChange={setClientId}
+          fileName={fileName}
+          onFileNameChange={setFileName}
+          onPdfFileChange={handleFileChange}
+          useManualJson={useManualJson}
+          onUseManualJsonChange={setUseManualJson}
+          parsedItemsText={parsedItemsText}
+          onParsedItemsTextChange={setParsedItemsText}
+          persistResult={persistResult}
+          onPersistResultChange={setPersistResult}
+          isLoading={isLoading}
+          onSubmit={handleSubmit}
+          onSeed={handleSeed}
+          seedStatus={seedStatus}
+          error={error}
+        />
 
-          <label className="flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-            Nome do arquivo
-            <input
-              className="rounded-xl border border-zinc-300 px-3 py-2 outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
-              value={fileName}
-              onChange={(event) => setFileName(event.target.value)}
-            />
-          </label>
-
-          <label className="lg:col-span-2 flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-            Upload PDF (opcional)
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileChange}
-              className="rounded-xl border border-zinc-300 px-3 py-2 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-200 file:px-3 file:py-1 file:text-sm file:font-semibold"
-            />
-          </label>
-
-          <div className="lg:col-span-2 space-y-2">
-            <label className="inline-flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-              <input
-                type="checkbox"
-                checked={useManualJson}
-                onChange={(event) => setUseManualJson(event.target.checked)}
-              />
-              Usar entrada manual em JSON (modo avancado)
-            </label>
-
-            {useManualJson ? (
-              <label className="flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-                Itens do pedido (JSON)
-                <textarea
-                  className="min-h-44 rounded-xl border border-zinc-300 px-3 py-2 font-mono text-xs outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
-                  value={parsedItemsText}
-                  onChange={(event) => setParsedItemsText(event.target.value)}
-                  placeholder='[{"rawDescription":"Cafe 500g","quantity":10,"confidence":0.9}]'
-                />
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">Itens no JSON: {parsedItemsPreview}</span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">Se houver PDF enviado, o sistema prioriza o PDF.</span>
-              </label>
-            ) : (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">Modo simples ativo: o sistema usa o PDF enviado para extrair os itens automaticamente.</p>
-            )}
-          </div>
-
-          <label className="lg:col-span-2 inline-flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-            <input
-              type="checkbox"
-              checked={persistResult}
-              onChange={(event) => setPersistResult(event.target.checked)}
-            />
-            Persistir resultado no banco
-          </label>
-
-          <div className="lg:col-span-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isLoading}
-              className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {isLoading ? "Analisando..." : "Analisar pedido"}
-            </button>
-            <button
-              type="button"
-              onClick={handleSeed}
-              className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-            >
-              Rodar seed demo
-            </button>
-          </div>
-
-          {seedStatus ? <p className="lg:col-span-2 text-sm text-emerald-700">{seedStatus}</p> : null}
-          {error ? <p className="lg:col-span-2 text-sm text-red-700">{error}</p> : null}
-        </section>
-
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-sm font-semibold tracking-wide text-zinc-500 uppercase">Carga de historico real</h2>
-          <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-300">
-            Cole os dados de clientes, produtos e compras para alimentar a base usada na analise dos pedidos.
-          </p>
-
-          <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-            <p className="font-semibold">Upload CSV (recomendado)</p>
-            <p className="mt-1">Cabecalho esperado:</p>
-            <p className="mt-1 font-mono">clientCode,clientName,region,sku,productName,aliases,quantity,soldAt</p>
-            <p className="mt-1">`aliases` pode usar `|` para multiplos valores. Exemplo: cafe 500|cafe tradicional 500g</p>
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <label className="flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-              Arquivo CSV
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(event) => setHistoryCsvFile(event.target.files?.[0])}
-                className="rounded-xl border border-zinc-300 px-3 py-2 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-200 file:px-3 file:py-1 file:text-sm file:font-semibold"
-              />
-            </label>
-
-            <label className="inline-flex items-center gap-2 self-end text-sm text-zinc-700 dark:text-zinc-200">
-              <input
-                type="checkbox"
-                checked={historyCsvReplace}
-                onChange={(event) => setHistoryCsvReplace(event.target.checked)}
-              />
-              Substituir historico existente para os SKUs do arquivo
-            </label>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleHistoryCsvUpload}
-              disabled={historyCsvLoading}
-              className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-            >
-              {historyCsvLoading ? "Importando CSV..." : "Importar CSV no banco"}
-            </button>
-          </div>
-
-          {historyCsvStatus ? <p className="mt-2 text-sm text-emerald-700">{historyCsvStatus}</p> : null}
-          {historyCsvError ? <p className="mt-2 text-sm text-red-700">{historyCsvError}</p> : null}
-
-          <div className="mt-3 space-y-3">
-            <textarea
-              className="min-h-44 w-full rounded-xl border border-zinc-300 px-3 py-2 font-mono text-xs outline-none transition focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-400"
-              value={historyPayloadText}
-              onChange={(event) => setHistoryPayloadText(event.target.value)}
-            />
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleLoadHistory}
-                disabled={historyLoading}
-                className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-              >
-                {historyLoading ? "Carregando historico..." : "Carregar historico no banco"}
-              </button>
-            </div>
-
-            {historyStatus ? <p className="text-sm text-emerald-700">{historyStatus}</p> : null}
-            {historyError ? <p className="text-sm text-red-700">{historyError}</p> : null}
-          </div>
-        </section>
+        <HistoryImportSection
+          historyCsvReplace={historyCsvReplace}
+          onHistoryCsvReplaceChange={setHistoryCsvReplace}
+          onHistoryCsvFileChange={setHistoryCsvFile}
+          onHistoryCsvUpload={handleHistoryCsvUpload}
+          historyCsvLoading={historyCsvLoading}
+          historyCsvStatus={historyCsvStatus}
+          historyCsvError={historyCsvError}
+          historyPayloadText={historyPayloadText}
+          onHistoryPayloadTextChange={setHistoryPayloadText}
+          onLoadHistory={handleLoadHistory}
+          historyLoading={historyLoading}
+          historyStatus={historyStatus}
+          historyError={historyError}
+        />
 
         <AnalysisResultSection result={result} />
 

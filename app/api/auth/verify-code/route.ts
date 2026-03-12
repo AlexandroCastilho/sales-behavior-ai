@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
+import { createErrorResponse } from "@/lib/api-error";
 import { verifyEmailLoginCode } from "@/services/auth.service";
 
 const bodySchema = z.object({
@@ -41,15 +42,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const detail = error instanceof Error ? error.message : "Erro desconhecido";
-    const status = detail.includes("Codigo invalido") ? 401 : detail.includes("DATABASE_URL") ? 503 : 500;
-
-    return NextResponse.json(
-      {
-        message: "Falha ao validar codigo.",
-        detail,
-      },
-      { status },
-    );
+    return createErrorResponse({
+      error,
+      message: "Falha ao validar codigo.",
+      statusRules: [{ includes: "Codigo invalido", status: 401 }],
+    });
   }
 }
