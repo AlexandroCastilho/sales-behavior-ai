@@ -22,41 +22,6 @@ type UserWithPassword = UserLite & {
   passwordHash: string | null;
 };
 
-type SessionWithUser = {
-  expiresAt: Date;
-  revokedAt: Date | null;
-  user: UserLite;
-};
-
-type PrismaAuthClient = {
-  authSession: {
-    create(args: unknown): Promise<unknown>;
-    findUnique(args: unknown): Promise<SessionWithUser | null>;
-    updateMany(args: unknown): Promise<unknown>;
-  };
-  user: {
-    findUnique(args: unknown): Promise<unknown>;
-    create(args: unknown): Promise<UserLite>;
-    update(args: unknown): Promise<unknown>;
-    upsert(args: unknown): Promise<{ id: string; email: string }>;
-  };
-  passwordResetToken: {
-    create(args: unknown): Promise<unknown>;
-    findFirst(args: unknown): Promise<{ id: string } | null>;
-    update(args: unknown): Promise<unknown>;
-  };
-  emailLoginCode: {
-    create(args: unknown): Promise<unknown>;
-    findFirst(args: unknown): Promise<{ id: string } | null>;
-    update(args: unknown): Promise<unknown>;
-  };
-  $transaction(args: Array<Promise<unknown>>): Promise<unknown>;
-};
-
-function getAuthPrismaClient(): PrismaAuthClient {
-  return getPrismaClient() as unknown as PrismaAuthClient;
-}
-
 function assertDatabase() {
   if (!isDatabaseConfigured()) {
     throw new Error("DATABASE_URL nao definido no ambiente.");
@@ -64,7 +29,7 @@ function assertDatabase() {
 }
 
 async function createSessionForUser(userId: string): Promise<string> {
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
   const token = generateSessionToken();
 
   await prisma.authSession.create({
@@ -86,7 +51,7 @@ export async function registerWithPassword(input: {
   assertDatabase();
 
   const email = normalizeEmail(input.email);
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
 
   const existing = (await prisma.user.findUnique({
     where: { email },
@@ -116,7 +81,7 @@ export async function loginWithPassword(input: {
   assertDatabase();
 
   const email = normalizeEmail(input.email);
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
 
   const user = (await prisma.user.findUnique({
     where: { email },
@@ -142,7 +107,7 @@ export async function requestPasswordReset(rawEmail: string): Promise<{ devCode?
   assertDatabase();
 
   const email = normalizeEmail(rawEmail);
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
   const user = (await prisma.user.findUnique({
     where: { email },
     select: { id: true, email: true },
@@ -177,7 +142,7 @@ export async function resetPasswordWithCode(input: {
   assertDatabase();
 
   const email = normalizeEmail(input.email);
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
   const user = (await prisma.user.findUnique({
     where: { email },
     select: { id: true },
@@ -218,7 +183,7 @@ export async function requestEmailLoginCode(rawEmail: string): Promise<{ devCode
   assertDatabase();
 
   const email = normalizeEmail(rawEmail);
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
   const code = generateLoginCode();
 
   const user = await prisma.user.upsert({
@@ -250,7 +215,7 @@ export async function verifyEmailLoginCode(rawEmail: string, code: string): Prom
   assertDatabase();
 
   const email = normalizeEmail(rawEmail);
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
 
   const user = (await prisma.user.findUnique({
     where: { email },
@@ -297,7 +262,7 @@ export async function getUserFromSessionToken(token: string): Promise<{
 } | null> {
   assertDatabase();
 
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
 
   const session = await prisma.authSession.findUnique({
     where: { tokenHash: hashValue(token) },
@@ -324,7 +289,7 @@ export async function getUserFromSessionToken(token: string): Promise<{
 export async function revokeSessionByToken(token: string): Promise<void> {
   assertDatabase();
 
-  const prisma = getAuthPrismaClient();
+  const prisma = getPrismaClient();
 
   await prisma.authSession.updateMany({
     where: {
