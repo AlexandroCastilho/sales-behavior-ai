@@ -9,8 +9,8 @@ export function HomeHeader({ email, onLogout }: HomeHeaderProps) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div>
-        <p className="text-xs font-semibold tracking-[0.14em] text-zinc-500 uppercase">Sales Behavior AI</p>
-        <h1 className="text-xl font-semibold text-zinc-900">Conferencia de pedido</h1>
+        <p className="text-xs font-semibold tracking-[0.14em] text-zinc-500 uppercase">PedScan</p>
+        <h1 className="text-xl font-semibold text-zinc-900">Conferencia inteligente de pedidos</h1>
       </div>
       <div className="flex items-center gap-3">
         <ThemeToggle />

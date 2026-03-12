@@ -190,12 +190,18 @@ export default function Home() {
 
   async function handleHistoryCsvUpload() {
     if (!historyCsvFile) {
-      setHistoryCsvError("Selecione um arquivo CSV para carregar.");
+      setHistoryCsvError("Selecione um arquivo CSV ou XLSX para carregar.");
+      return;
+    }
+
+    const lowerName = historyCsvFile.name.toLowerCase();
+    if (!lowerName.endsWith(".csv") && !lowerName.endsWith(".xlsx")) {
+      setHistoryCsvError("Formato invalido. Envie um arquivo .csv ou .xlsx.");
       return;
     }
 
     if (historyCsvFile.size > 20 * 1024 * 1024) {
-      setHistoryCsvError("Arquivo CSV muito grande. Limite atual: 20MB.");
+      setHistoryCsvError("Arquivo muito grande. Limite atual: 20MB.");
       return;
     }
 
@@ -216,9 +222,9 @@ export default function Home() {
       const data = await readResponseBody<HistorySeedResponse>(response);
       if (!response.ok) {
         if (response.status === 413) {
-          throw new Error("Arquivo CSV excede o limite de upload. Tente dividir o arquivo em partes menores.");
+          throw new Error("Arquivo excede o limite de upload. Tente dividir o arquivo em partes menores.");
         }
-        throw new Error(data.detail ?? data.message ?? "Falha ao carregar historico via CSV.");
+        throw new Error(data.detail ?? data.message ?? "Falha ao carregar historico via arquivo.");
       }
 
       const clientCode = data.client?.code
@@ -232,10 +238,10 @@ export default function Home() {
       const purchasesLoaded =
         typeof data.purchasesLoaded === "number" ? ` Compras carregadas: ${data.purchasesLoaded}.` : "";
       setHistoryCsvStatus(
-        `${data.message ?? "Historico CSV carregado com sucesso."}${clientCode}${clientCodes}${purchasesLoaded}`,
+        `${data.message ?? "Historico carregado com sucesso."}${clientCode}${clientCodes}${purchasesLoaded}`,
       );
     } catch (csvError) {
-      setHistoryCsvError(csvError instanceof Error ? csvError.message : "Erro ao carregar CSV.");
+      setHistoryCsvError(csvError instanceof Error ? csvError.message : "Erro ao carregar arquivo.");
     } finally {
       setHistoryCsvLoading(false);
     }

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { read, utils } from "xlsx";
 
 import { createErrorResponse } from "@/lib/api-error";
 import { getPrismaClient } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-type StandardCsvRow = {
+type HistoryImportRow = {
   clientCode: string;
   clientName: string;
   region?: string;
@@ -19,6 +20,13 @@ type StandardCsvRow = {
 type RawCsvData = {
   headers: string[];
   rows: string[][];
+};
+
+type WorksheetCell = string | number | boolean | Date | null | undefined;
+
+type MonthColumn = {
+  index: number;
+  soldAt: string;
 };
 
 const REQUIRED_HEADERS = [
@@ -86,10 +94,36 @@ function normalizeHeader(text: string): string {
     .trim();
 }
 
+function stringifyCell(value: WorksheetCell): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return String(value).trim();
+}
+
+function normalizeKey(text: string): string {
+  return normalizeHeader(text);
+}
+
 function parseNumber(value: string): number {
   const normalized = value.replace(/\./g, "").replace(",", ".").trim();
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function parseSpreadsheetNumber(value: WorksheetCell): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : NaN;
+  }
+
+  if (typeof value === "string") {
+    return parseNumber(value);
+  }
+
+  return NaN;
 }
 
 function toIsoDate(value: string): string | undefined {
@@ -98,6 +132,75 @@ function toIsoDate(value: string): string | undefined {
     return undefined;
   }
   return date.toISOString();
+}
+
+function getLastDayOfMonthIso(year: number, monthIndex: number): string {
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0));
+  return lastDay.toISOString();
+}
+
+export function parseMonthLabelToIsoDate(label: string): string | undefined {
+  const normalized = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  const monthByKey: Record<string, number> = {
+    JAN: 0,
+    JANEIRO: 0,
+    FEB: 1,
+    FEV: 1,
+    FEVEREIRO: 1,
+    MAR: 2,
+    MARCO: 2,
+    APR: 3,
+    ABR: 3,
+    ABRIL: 3,
+    MAY: 4,
+    MAI: 4,
+    MAIO: 4,
+    JUN: 5,
+    JUNHO: 5,
+    JUL: 6,
+    JULHO: 6,
+    AUG: 7,
+    AGO: 7,
+    AGOSTO: 7,
+    SEP: 8,
+    SET: 8,
+    SETEMBRO: 8,
+    OCT: 9,
+    OUT: 9,
+    OUTUBRO: 9,
+    NOV: 10,
+    NOVEMBRO: 10,
+    DEC: 11,
+    DEZ: 11,
+    DEZEMBRO: 11,
+  };
+
+  const yearMatch = normalized.match(/\b(19|20)\d{2}\b/);
+  if (!yearMatch) {
+    return undefined;
+  }
+
+  const year = Number(yearMatch[0]);
+  const monthToken = normalized
+    .split(" ")
+    .find((part) => Object.prototype.hasOwnProperty.call(monthByKey, part));
+
+  if (!monthToken) {
+    return undefined;
+  }
+
+  return getLastDayOfMonthIso(year, monthByKey[monthToken]);
 }
 
 function addMonths(date: Date, months: number): Date {
@@ -119,7 +222,7 @@ function parseRawCsv(csvText: string): RawCsvData {
   return { headers, rows };
 }
 
-function parseStandardCsv(raw: RawCsvData): StandardCsvRow[] {
+function parseStandardCsv(raw: RawCsvData): HistoryImportRow[] {
   const header = raw.headers;
 
   const missingHeaders = REQUIRED_HEADERS.filter((key) => !header.includes(key));
@@ -127,7 +230,7 @@ function parseStandardCsv(raw: RawCsvData): StandardCsvRow[] {
     throw new Error(`Colunas obrigatorias ausentes no CSV: ${missingHeaders.join(", ")}`);
   }
 
-  const rows: StandardCsvRow[] = [];
+  const rows: HistoryImportRow[] = [];
 
   for (let i = 0; i < raw.rows.length; i += 1) {
     const values = raw.rows[i];
@@ -179,7 +282,7 @@ function getRequiredIndex(normalizedHeaders: string[], aliases: string[]): numbe
   throw new Error(`Coluna obrigatoria ausente no CSV: ${aliases[0]}`);
 }
 
-function parsePartnerModelCsv(raw: RawCsvData): StandardCsvRow[] {
+function parsePartnerModelCsv(raw: RawCsvData): HistoryImportRow[] {
   const normalizedHeaders = raw.headers.map(normalizeHeader);
 
   const clientCodeIdx = getRequiredIndex(normalizedHeaders, ["CODIGOPARCEIRO"]);
@@ -200,7 +303,7 @@ function parsePartnerModelCsv(raw: RawCsvData): StandardCsvRow[] {
     throw new Error("Colunas de historico 'PESO TOTAL FAT' nao encontradas no CSV.");
   }
 
-  const rows: StandardCsvRow[] = [];
+  const rows: HistoryImportRow[] = [];
 
   for (let i = 0; i < raw.rows.length; i += 1) {
     const values = raw.rows[i];
@@ -260,7 +363,7 @@ function parsePartnerModelCsv(raw: RawCsvData): StandardCsvRow[] {
   return rows;
 }
 
-function parseCsvToRows(csvText: string): StandardCsvRow[] {
+export function parseHistoryCsvFile(csvText: string): HistoryImportRow[] {
   const raw = parseRawCsv(csvText);
   const normalizedHeaders = raw.headers.map(normalizeHeader);
   const isPartnerTemplate = normalizedHeaders.includes("CODIGOPARCEIRO") && normalizedHeaders.includes("CODPRODUTO");
@@ -272,22 +375,177 @@ function parseCsvToRows(csvText: string): StandardCsvRow[] {
   return parseStandardCsv(raw);
 }
 
+function findHeaderIndex(normalizedHeaders: string[], aliases: string[], required = true): number {
+  for (const alias of aliases) {
+    const idx = normalizedHeaders.indexOf(alias);
+    if (idx >= 0) {
+      return idx;
+    }
+  }
+
+  if (required) {
+    throw new Error(`Coluna obrigatoria ausente no XLSX: ${aliases[0]}`);
+  }
+
+  return -1;
+}
+
+function getMonthColumns(monthRow: string[], headerRow: string[]): MonthColumn[] {
+  const monthColumns: MonthColumn[] = [];
+
+  for (let i = 0; i < headerRow.length; i += 1) {
+    const technicalHeader = normalizeKey(headerRow[i]);
+    if (!technicalHeader.includes("QUANTIDADE")) {
+      continue;
+    }
+
+    const soldAt = parseMonthLabelToIsoDate(monthRow[i]);
+    if (!soldAt) {
+      continue;
+    }
+
+    monthColumns.push({ index: i, soldAt });
+  }
+
+  return monthColumns;
+}
+
+export function mapErpWorksheetToHistoryRows(worksheetRows: WorksheetCell[][]): HistoryImportRow[] {
+  if (worksheetRows.length < 3) {
+    throw new Error("Planilha XLSX invalida. Esperado: linha de meses, linha de cabecalho e dados.");
+  }
+
+  const monthRow = (worksheetRows[0] ?? []).map(stringifyCell);
+  const headerRow = (worksheetRows[1] ?? []).map(stringifyCell);
+  const dataRows = worksheetRows.slice(2);
+  const normalizedHeaders = headerRow.map(normalizeKey);
+
+  const clientCodeIdx = findHeaderIndex(normalizedHeaders, ["CODIGOPARCEIRO", "CODPARCEIRO"]);
+  const clientNameIdx = findHeaderIndex(normalizedHeaders, ["NOMEPARCEIRO", "NOMEFANTASIAPARCEIRO"]);
+  const regionIdx = findHeaderIndex(normalizedHeaders, ["CIDADEPARCEIRO", "REGIAO"], false);
+  const skuIdx = findHeaderIndex(normalizedHeaders, ["CODPRODUTO", "CODIGOPRODUTO"]);
+  const productNameIdx = findHeaderIndex(normalizedHeaders, ["DESCPRODUTO", "DESCRICAOPRODUTO"]);
+  const lastPurchaseIdx = findHeaderIndex(normalizedHeaders, ["DATEDTULTCOMPRA", "DTULTCOMPRA", "DATAULTCOMPRA"], false);
+
+  const monthColumns = getMonthColumns(monthRow, headerRow);
+  const fallbackQuantityIndexes = normalizedHeaders
+    .map((header, index) => ({ header, index }))
+    .filter((item) => item.header.includes("QUANTIDADE"))
+    .map((item) => item.index)
+    .filter((index) => !monthColumns.some((column) => column.index === index));
+
+  const rows: HistoryImportRow[] = [];
+
+  for (const worksheetRow of dataRows) {
+    const clientCode = stringifyCell(worksheetRow[clientCodeIdx]);
+    const clientName = stringifyCell(worksheetRow[clientNameIdx]);
+    const region = regionIdx >= 0 ? stringifyCell(worksheetRow[regionIdx]) : "";
+    const sku = stringifyCell(worksheetRow[skuIdx]);
+    const productName = stringifyCell(worksheetRow[productNameIdx]);
+
+    if (!clientCode || !clientName || !sku || !productName) {
+      continue;
+    }
+
+    for (const monthColumn of monthColumns) {
+      const quantity = parseSpreadsheetNumber(worksheetRow[monthColumn.index]);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        continue;
+      }
+
+      rows.push({
+        clientCode,
+        clientName,
+        region: region || undefined,
+        sku,
+        productName,
+        aliases: [],
+        quantity,
+        soldAt: monthColumn.soldAt,
+      });
+    }
+
+    if (monthColumns.length === 0 && fallbackQuantityIndexes.length > 0) {
+      const fallbackSoldAt =
+        (lastPurchaseIdx >= 0 && toIsoDate(stringifyCell(worksheetRow[lastPurchaseIdx]))) || undefined;
+
+      if (!fallbackSoldAt) {
+        continue;
+      }
+
+      for (const quantityIndex of fallbackQuantityIndexes) {
+        const quantity = parseSpreadsheetNumber(worksheetRow[quantityIndex]);
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          continue;
+        }
+
+        rows.push({
+          clientCode,
+          clientName,
+          region: region || undefined,
+          sku,
+          productName,
+          aliases: [],
+          quantity,
+          soldAt: fallbackSoldAt,
+        });
+      }
+    }
+  }
+
+  if (!rows.length) {
+    throw new Error("Nenhum historico valido foi encontrado no XLSX informado.");
+  }
+
+  return rows;
+}
+
+export function parseHistoryXlsxFile(fileBuffer: ArrayBuffer): HistoryImportRow[] {
+  const workbook = read(fileBuffer, { type: "array", cellDates: false });
+  const firstSheetName = workbook.SheetNames[0];
+
+  if (!firstSheetName) {
+    throw new Error("Arquivo XLSX sem planilhas disponiveis.");
+  }
+
+  const worksheet = workbook.Sheets[firstSheetName];
+  const worksheetRows = utils.sheet_to_json<WorksheetCell[]>(worksheet, {
+    header: 1,
+    raw: true,
+    defval: "",
+    blankrows: false,
+  });
+
+  return mapErpWorksheetToHistoryRows(worksheetRows);
+}
+
+function isXlsxFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  const type = (file.type || "").toLowerCase();
+
+  return (
+    name.endsWith(".xlsx") ||
+    type.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const form = await request.formData();
-    const file = form.get("csvFile");
+    const file = form.get("csvFile") ?? form.get("historyFile");
     const replaceHistoryRaw = form.get("replaceHistory");
     const replaceHistory = typeof replaceHistoryRaw === "string" ? replaceHistoryRaw === "true" : true;
 
     if (!(file instanceof File)) {
       return NextResponse.json(
-        { message: "Falha ao carregar CSV.", detail: "Arquivo CSV nao informado." },
+        { message: "Falha ao carregar historico.", detail: "Arquivo CSV ou XLSX nao informado." },
         { status: 400 },
       );
     }
 
-    const csvText = await file.text();
-    const rows = parseCsvToRows(csvText);
+    const rows = isXlsxFile(file)
+      ? parseHistoryXlsxFile(await file.arrayBuffer())
+      : parseHistoryCsvFile(await file.text());
 
     const prisma = getPrismaClient();
     await prisma.$connect();
@@ -397,7 +655,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        message: "Historico CSV carregado com sucesso.",
+        message: "Historico carregado com sucesso.",
         clientsLoaded: clients.length,
         clientCodes: clients.map((client) => client.code),
         productsLoaded: productRows.length,
@@ -409,7 +667,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return createErrorResponse({
       error,
-      message: "Falha ao carregar historico via CSV.",
+      message: "Falha ao carregar historico via arquivo.",
       defaultStatus: 400,
     });
   }

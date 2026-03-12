@@ -1,17 +1,24 @@
-# Sales Behavior AI
+# PedScan
 
-Sistema web para analisar pedidos de venda em PDF e comparar com historico de compras do cliente para detectar comportamentos fora do padrao.
+Conferencia inteligente de pedidos
+
+O PedScan analisa pedidos de venda, compara os itens com o historico de compras do cliente e identifica riscos, desvios e possiveis inconsistencias antes da aprovacao.
+
+## O que o produto faz
+
+O PedScan foi criado para apoiar a conferencia comercial antes da aprovacao do pedido.
+Com ele, equipes operacionais, comerciais e de gestao conseguem validar pedidos com mais seguranca e agilidade.
 
 ## Objetivo
 
-Detectar automaticamente:
+Ajudar a identificar automaticamente:
 
-- pedidos inconsistentes
+- pedidos com itens fora do padrao do cliente
 - produtos nunca comprados
-- quantidades muito acima da media
+- quantidades muito acima da media historica
 - cenarios com historico insuficiente
 
-Gerar um parecer com classificacao de risco:
+O sistema gera um parecer com classificacao de risco:
 
 - LOW
 - MEDIUM
@@ -79,16 +86,16 @@ Payload de exemplo:
 
 ```json
 {
-	"clientId": "client-demo",
-	"fileName": "pedido-123.pdf",
-	"persistResult": true,
-	"parsedItems": [
-		{
-			"rawDescription": "Cafe 500g",
-			"quantity": 28,
-			"confidence": 0.95
-		}
-	]
+  "clientId": "client-demo",
+  "fileName": "pedido-123.pdf",
+  "persistResult": true,
+  "parsedItems": [
+    {
+      "rawDescription": "Cafe 500g",
+      "quantity": 28,
+      "confidence": 0.95
+    }
+  ]
 }
 ```
 

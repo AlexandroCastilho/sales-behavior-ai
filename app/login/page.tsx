@@ -229,11 +229,11 @@ export default function LoginPage() {
         <div className="relative flex flex-col justify-between bg-gradient-to-b from-zinc-900 to-zinc-800 p-8 text-zinc-100 sm:p-10">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_15%,rgba(255,255,255,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.08),transparent_35%)]" />
           <div className="relative">
-            <p className="text-xs font-semibold tracking-[0.2em] text-zinc-300 uppercase">Sales Behavior AI</p>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Conferencia de pedidos com padrao SaaS profissional.</h1>
+            <p className="text-xs font-semibold tracking-[0.2em] text-zinc-300 uppercase">PedScan</p>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Conferencia inteligente de pedidos.</h1>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-zinc-300">
-              Ambiente seguro para cadastro, login e acompanhamento de analises de pedido com regras
-              comerciais e apoio de IA.
+              Analise pedidos de venda com apoio do historico do cliente para identificar riscos e
+              inconsistencias antes da aprovacao.
             </p>
           </div>
           <div className="relative mt-10 space-y-3 text-sm text-zinc-300">

@@ -94,14 +94,14 @@ function getTransporter(config: SmtpConfig): nodemailer.Transporter {
 function getEmailTemplate(purpose: AuthCodePurpose, code: string): { subject: string; html: string; text: string } {
   if (purpose === "password-reset") {
     return {
-      subject: "Seu codigo de recuperacao - Sales Behavior AI",
+      subject: "Seu codigo de recuperacao - PedScan",
       html: `<p>Seu codigo de recuperacao e: <strong>${code}</strong></p><p>Ele expira em 10 minutos.</p>`,
       text: `Seu codigo de recuperacao e: ${code}. Ele expira em 10 minutos.`,
     };
   }
 
   return {
-    subject: "Seu codigo de acesso - Sales Behavior AI",
+    subject: "Seu codigo de acesso - PedScan",
     html: `<p>Seu codigo de acesso e: <strong>${code}</strong></p><p>Ele expira em 10 minutos.</p>`,
     text: `Seu codigo de acesso e: ${code}. Ele expira em 10 minutos.`,
   };

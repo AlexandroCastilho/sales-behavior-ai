@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sales Behavior AI",
-  description: "Analise inteligente de pedidos de venda com IA e historico do cliente.",
+  title: "PedScan",
+  description:
+    "O PedScan analisa pedidos de venda, compara os itens com o historico de compras do cliente e identifica riscos, desvios e possiveis inconsistencias antes da aprovacao.",
 };
 
 export default function RootLayout({

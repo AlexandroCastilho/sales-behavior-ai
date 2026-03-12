@@ -81,7 +81,7 @@ export function AnalysisFormSection(props: AnalysisFormSectionProps) {
           type="file"
           accept="application/pdf"
           onChange={onPdfFileChange}
-          className="rounded-xl border border-zinc-300 px-3 py-2 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-200 file:px-3 file:py-1 file:text-sm file:font-semibold"
+          className="rounded-xl border border-zinc-300 px-3 py-2 text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-200 file:px-3 file:py-1 file:text-sm file:font-semibold file:text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:file:bg-zinc-700 dark:file:text-zinc-100"
         />
       </label>
 

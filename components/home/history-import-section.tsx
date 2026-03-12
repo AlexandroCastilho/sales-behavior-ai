@@ -39,20 +39,21 @@ export function HistoryImportSection(props: HistoryImportSectionProps) {
       </p>
 
       <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-        <p className="font-semibold">Upload CSV (recomendado)</p>
-        <p className="mt-1">Cabecalho esperado:</p>
+        <p className="font-semibold">Upload CSV ou XLSX (recomendado)</p>
+        <p className="mt-1">Para CSV, cabecalho esperado:</p>
         <p className="mt-1 font-mono">clientCode,clientName,region,sku,productName,aliases,quantity,soldAt</p>
-        <p className="mt-1">`aliases` pode usar `|` para multiplos valores. Exemplo: cafe 500|cafe tradicional 500g</p>
+        <p className="mt-1">No XLSX do ERP, a 1a linha deve ter os meses e a 2a linha os cabecalhos tecnicos.</p>
+        <p className="mt-1">`aliases` pode usar `|` para multiplos valores no CSV. Exemplo: cafe 500|cafe tradicional 500g</p>
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <label className="flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-          Arquivo CSV
+          Arquivo de historico (CSV ou XLSX)
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={(event) => onHistoryCsvFileChange(event.target.files?.[0])}
-            className="rounded-xl border border-zinc-300 px-3 py-2 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-200 file:px-3 file:py-1 file:text-sm file:font-semibold"
+            className="rounded-xl border border-zinc-300 px-3 py-2 text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-200 file:px-3 file:py-1 file:text-sm file:font-semibold file:text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:file:bg-zinc-700 dark:file:text-zinc-100"
           />
         </label>
 
@@ -73,7 +74,7 @@ export function HistoryImportSection(props: HistoryImportSectionProps) {
           disabled={historyCsvLoading}
           className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
         >
-          {historyCsvLoading ? "Importando CSV..." : "Importar CSV no banco"}
+          {historyCsvLoading ? "Importando arquivo..." : "Importar arquivo no banco"}
         </button>
       </div>
 
