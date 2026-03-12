@@ -5,12 +5,13 @@ import { getPrismaClient } from "@/lib/prisma";
 export async function POST() {
   try {
     const prisma = getPrismaClient();
+    await prisma.$connect();
 
     const client = await prisma.client.upsert({
-      where: { code: "CLIENT-DEMO" },
+      where: { code: "client-demo" },
       update: { name: "Cliente Demo", region: "Sudeste" },
       create: {
-        code: "CLIENT-DEMO",
+        code: "client-demo",
         name: "Cliente Demo",
         region: "Sudeste",
       },
@@ -75,12 +76,22 @@ export async function POST() {
       products: [cafe.id, acucar.id],
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido";
+    const isDatabaseUnavailable =
+      message.includes("DATABASE_URL") ||
+      message.includes("P1001") ||
+      message.includes("Can't reach database server") ||
+      message.includes("ECONNREFUSED");
+    const status = isDatabaseUnavailable ? 503 : 500;
+
     return NextResponse.json(
       {
         message: "Falha ao executar seed.",
-        detail: error instanceof Error ? error.message : "Erro desconhecido",
+        detail: isDatabaseUnavailable
+          ? "Banco indisponivel. Verifique DATABASE_URL e conectividade do Postgres."
+          : message,
       },
-      { status: 500 },
+      { status },
     );
   }
 }

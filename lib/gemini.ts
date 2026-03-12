@@ -3,6 +3,16 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AnalysisItemResult } from "@/types/analysis";
 import { ParsedOrderItem, RiskLevel } from "@/types/product";
 
+function extractJsonBlock(text: string): string | undefined {
+	const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+	if (fenced?.[1]) {
+		return fenced[1];
+	}
+
+	const objectMatch = text.match(/\{[\s\S]*\}/);
+	return objectMatch?.[0];
+}
+
 function getModel() {
 	const apiKey = process.env.GEMINI_API_KEY;
 	if (!apiKey) {
@@ -35,7 +45,8 @@ export async function extractOrderItemsFromPdfWithAI(params: {
 		]);
 
 		const text = result.response.text().trim();
-		const json = JSON.parse(text) as { items?: ParsedOrderItem[] };
+		const jsonText = extractJsonBlock(text) ?? text;
+		const json = JSON.parse(jsonText) as { items?: ParsedOrderItem[] };
 		return (json.items ?? []).filter((item) => Number.isFinite(item.quantity));
 	} catch {
 		return [];

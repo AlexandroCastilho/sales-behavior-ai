@@ -8,6 +8,39 @@ import { matchOrderItemsToProducts } from "./product-match.service";
 import { parseOrderPdf } from "./pdf-parser.service";
 import { getClientProductHistory } from "./sales-history.service";
 
+async function resolveClientId(clientIdOrCode: string): Promise<string> {
+	try {
+		const prisma = getPrismaClient();
+
+		const byId = await prisma.client.findUnique({
+			where: { id: clientIdOrCode },
+			select: { id: true },
+		});
+
+		if (byId) {
+			return byId.id;
+		}
+
+		const byCode = await prisma.client.findFirst({
+			where: {
+				code: {
+					equals: clientIdOrCode,
+					mode: "insensitive",
+				},
+			},
+			select: { id: true },
+		});
+
+		if (byCode) {
+			return byCode.id;
+		}
+	} catch {
+		// Se banco nao estiver disponivel, segue com valor original para fallback local.
+	}
+
+	return clientIdOrCode;
+}
+
 function determineItemRisk(findings: RuleFinding[]): RiskLevel {
 	if (findings.some((finding) => finding.severity === "CRITICAL")) {
 		return "HIGH";
@@ -115,13 +148,14 @@ async function saveAnalysisResult(params: {
 }
 
 export async function analyzeOrder(input: AnalyzeOrderInput): Promise<AnalysisResult> {
+	const resolvedClientId = await resolveClientId(input.clientId);
 	const parsedFromPdf = input.parsedItems ?? (await parseOrderPdf({ fileName: input.fileName, pdfBase64: input.pdfBase64 }));
 	const matchedItems = await matchOrderItemsToProducts(parsedFromPdf);
 
 	const itemResults = await Promise.all(
 		matchedItems.map(async (item) => {
 			const history = item.matchedProductId
-				? await getClientProductHistory(input.clientId, item.matchedProductId)
+				? await getClientProductHistory(resolvedClientId, item.matchedProductId)
 				: undefined;
 
 			const findings = buildRuleFindings(item, history);
@@ -138,7 +172,7 @@ export async function analyzeOrder(input: AnalyzeOrderInput): Promise<AnalysisRe
 	const overallRisk = determineOverallRisk(itemResults);
 
 	const aiSummary = await generateAnalysisSummaryWithAI({
-		clientId: input.clientId,
+		clientId: resolvedClientId,
 		overallRisk,
 		itemResults,
 	});
@@ -146,7 +180,10 @@ export async function analyzeOrder(input: AnalyzeOrderInput): Promise<AnalysisRe
 	if (input.persistResult !== false) {
 		try {
 			await saveAnalysisResult({
-				input,
+				input: {
+					...input,
+					clientId: resolvedClientId,
+				},
 				overallRisk,
 				aiSummary,
 				itemResults,

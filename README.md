@@ -74,12 +74,15 @@ Campos opcionais no endpoint:
 
 - userId: vincula a analise ao usuario
 - persistResult: permite desligar gravacao no banco para testes rapidos
+- clientId: aceita id do cliente no banco ou codigo (ex.: client-demo)
 
 ## Endpoint de seed
 
 POST /api/seed
 
 Cria cliente/produtos de exemplo e historico de vendas para validar a analise localmente.
+
+Observacao: este endpoint depende de DATABASE_URL valido.
 
 ## Configuracao de ambiente
 
@@ -98,6 +101,12 @@ GEMINI_API_KEY="..."
 npm install
 npm run dev
 ```
+
+Abra a pagina inicial para testar o fluxo completo:
+
+- rodar seed demo
+- enviar parsedItems em JSON
+- enviar PDF opcional
 
 ## Roadmap
 
