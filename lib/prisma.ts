@@ -24,8 +24,15 @@ export function getPrismaClient(): PrismaClient {
 			: ["error"]
 		: [];
 
+	const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false";
+
 	const client = new PrismaClient({
-		adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL ?? "" }),
+		adapter: new PrismaPg({
+			connectionString: process.env.DATABASE_URL ?? "",
+			ssl: {
+				rejectUnauthorized,
+			},
+		}),
 		log: prismaLogs,
 	});
 

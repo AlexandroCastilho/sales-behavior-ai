@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
+import { SESSION_COOKIE_NAME } from "@/lib/auth";
 import { analyzeOrder } from "@/services/analysis.service";
+import { getUserFromSessionToken } from "@/services/auth.service";
 
 const bodySchema = z.object({
   clientId: z.string().min(1),
@@ -23,10 +26,25 @@ const bodySchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+    if (!sessionToken) {
+      return NextResponse.json({ message: "Nao autenticado." }, { status: 401 });
+    }
+
+    const user = await getUserFromSessionToken(sessionToken);
+    if (!user) {
+      return NextResponse.json({ message: "Sessao invalida ou expirada." }, { status: 401 });
+    }
+
     const body = await request.json();
     const parsed = bodySchema.parse(body);
 
-    const result = await analyzeOrder(parsed);
+    const result = await analyzeOrder({
+      ...parsed,
+      userId: user.id,
+    });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     if (error instanceof z.ZodError) {

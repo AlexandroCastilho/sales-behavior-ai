@@ -22,8 +22,30 @@ Gerar um parecer com classificacao de risco:
 
 - Next.js (App Router)
 - TailwindCSS
-- Prisma + Supabase PostgreSQL
+- Prisma + PostgreSQL
 - Google Gemini API
+
+## Autenticacao
+
+Fluxo padrao web com tela dedicada em /login:
+
+- cadastrar
+- login
+- esqueci senha (codigo de 6 digitos por email)
+
+Endpoints principais:
+
+- POST /api/auth/register
+- POST /api/auth/login
+- POST /api/auth/forgot-password/request
+- POST /api/auth/forgot-password/reset
+
+Endpoints auxiliares de sessao:
+
+- GET /api/auth/me
+- POST /api/auth/logout
+
+O endpoint de analise exige usuario autenticado.
 
 ## Arquitetura
 
@@ -90,10 +112,12 @@ Crie um arquivo .env com:
 
 ```bash
 DATABASE_URL="postgresql://..."
-NEXT_PUBLIC_SUPABASE_URL="https://...supabase.co"
-SUPABASE_SERVICE_ROLE_KEY="..."
 GEMINI_API_KEY="..."
+RESEND_API_KEY="..."        # opcional para envio real de email
+EMAIL_FROM="no-reply@..."   # opcional para envio real de email
 ```
+
+Sem RESEND_API_KEY e EMAIL_FROM, o envio de codigo funciona em modo desenvolvimento com codigo de teste retornado no frontend.
 
 ## Desenvolvimento
 
@@ -104,9 +128,23 @@ npm run dev
 
 Abra a pagina inicial para testar o fluxo completo:
 
+- entrar pela tela /login
 - rodar seed demo
 - enviar parsedItems em JSON
 - enviar PDF opcional
+
+## Gemini no projeto
+
+Sim, o projeto usa Gemini:
+
+- extracao de itens do PDF
+- geracao de parecer final da analise
+
+Se GEMINI_API_KEY nao estiver definido, o sistema usa fallback sem IA.
+
+## Manual
+
+Guia completo de uso da conferencia de pedido em [MANUAL_CONFERENCIA_PEDIDO.md](MANUAL_CONFERENCIA_PEDIDO.md).
 
 ## Roadmap
 
